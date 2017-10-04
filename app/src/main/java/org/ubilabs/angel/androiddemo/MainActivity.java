@@ -5,20 +5,29 @@ import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.os.Environment;
 import android.support.annotation.NonNull;
 import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
+import android.view.WindowManager;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.OpenCVLoader;
+import org.opencv.android.Utils;
+import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.Scalar;
+import org.opencv.core.Size;
+import org.opencv.imgproc.Imgproc;
 import org.ubilabs.angel.uitl.PermissionUtils;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.util.List;
@@ -55,6 +64,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     @Override
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         setContentView(R.layout.activity_main);
 
         if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
@@ -127,7 +137,35 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        Mat greyImg = inputFrame.gray();
+        Mat smallImg = new Mat(new Size(28,28), CvType.CV_8U, new Scalar(0));
+        Imgproc.resize(greyImg,smallImg,new Size(28,28));
+        mat2PngFile(smallImg);
         return inputFrame.rgba();
+    }
+
+    private File mat2PngFile(Mat mat) {
+        Bitmap bmp = Bitmap.createBitmap(mat.width(), mat.height(), Bitmap.Config.ARGB_8888);
+        Utils.matToBitmap(mat, bmp);
+        Log.e(TAG, "Transform: finish! ");
+
+        File file = null;
+        FileOutputStream fos;
+        try {
+            file = new File(Environment.getExternalStorageDirectory() + "/Test/smallImg" + ".png");
+            if (!file.getParentFile().exists()) {
+                boolean isCreated = file.getParentFile().mkdir();
+                if (!isCreated) {
+                    return file;
+                }
+            }
+            fos = new FileOutputStream(file);
+            bmp.compress(Bitmap.CompressFormat.PNG, 100, fos);
+            fos.close();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+        return file;
     }
 
     private void initCamera() {
