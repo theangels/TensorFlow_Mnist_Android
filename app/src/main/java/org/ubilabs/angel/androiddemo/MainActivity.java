@@ -1,11 +1,23 @@
 package org.ubilabs.angel.androiddemo;
 
+import android.Manifest;
+import android.app.Activity;
+import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
 import android.graphics.BitmapFactory;
+import android.support.annotation.NonNull;
+import android.support.v4.content.ContextCompat;
 import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
+import android.view.SurfaceView;
 import android.widget.TextView;
+import android.widget.Toast;
+
+import org.opencv.android.CameraBridgeViewBase;
+import org.opencv.android.OpenCVLoader;
+import org.opencv.core.Mat;
+import org.ubilabs.angel.uitl.PermissionUtils;
 
 import java.io.IOException;
 import java.io.InputStream;
@@ -13,11 +25,19 @@ import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
-public class MainActivity extends AppCompatActivity {
+public class MainActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2 {
 
     private static final String TAG = "MainActivity";
 
-    private TextView displayNumber;
+    private CameraBridgeViewBase openCvCameraView;
+
+    static {
+        if (!OpenCVLoader.initDebug()) {
+            Log.d(TAG, "OpenCV not loaded");
+        } else {
+            Log.d(TAG, "OpenCV loaded");
+        }
+    }
 
     private static final int INPUT_SIZE = 28;
     private static final String INPUT_NAME = "input";
@@ -37,7 +57,13 @@ public class MainActivity extends AppCompatActivity {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
 
-        displayNumber = (TextView) findViewById(R.id.displayNumber);
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermission();
+        } else {
+            initCamera();
+        }
 
         initTensorFlowAndLoadModel();
     }
@@ -80,10 +106,91 @@ public class MainActivity extends AppCompatActivity {
 
             if (results.size() > 0) {
                 String value = " Number is : " + results.get(0).getTitle();
-                displayNumber.setText(value);
+                Log.d(TAG, value);
             }
         } catch (IOException e) {
             e.printStackTrace();
+        }
+    }
+
+    /*
+     *   Opencv Callbacks
+     *
+     *   */
+    @Override
+    public void onCameraViewStarted(int width, int height) {
+    }
+
+    @Override
+    public void onCameraViewStopped() {
+    }
+
+    @Override
+    public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
+        return inputFrame.rgba();
+    }
+
+    private void initCamera() {
+        openCvCameraView = findViewById(R.id.HelloOpenCvView);
+        openCvCameraView.setVisibility(SurfaceView.VISIBLE);
+        openCvCameraView.setCvCameraViewListener(this);
+        openCvCameraView.setMaxFrameSize(1920, 1080);
+        openCvCameraView.enableFpsMeter();
+        openCvCameraView.enableView();
+    }
+
+    private void requestPermission() {
+        PermissionUtils.requestMultiPermissions(this, mPermissionGrant);
+    }
+
+    private PermissionUtils.PermissionGrant mPermissionGrant = new PermissionUtils.PermissionGrant() {
+        @Override
+        public void onPermissionGranted(int requestCode) {
+            switch (requestCode) {
+                case PermissionUtils.CODE_CAMERA:
+                    Toast.makeText(MainActivity.this, "Result Permission Grant CODE_CAMERA", Toast.LENGTH_SHORT).show();
+                    break;
+                case PermissionUtils.CODE_READ_EXTERNAL_STORAGE:
+                    Toast.makeText(MainActivity.this, "Result Permission Grant CODE_READ_EXTERNAL_STORAGE", Toast.LENGTH_SHORT).show();
+                    break;
+                case PermissionUtils.CODE_WRITE_EXTERNAL_STORAGE:
+                    Toast.makeText(MainActivity.this, "Result Permission Grant CODE_WRITE_EXTERNAL_STORAGE", Toast.LENGTH_SHORT).show();
+                    break;
+                default:
+                    Toast.makeText(MainActivity.this, "Result Permission Grant CODE_MULTI_PERMISSION", Toast.LENGTH_SHORT).show();
+                    break;
+            }
+        }
+    };
+
+    /**
+     * Callback received when a permissions request has been completed.
+     */
+    @Override
+    public void onRequestPermissionsResult(final int requestCode, @NonNull String[] permissions,
+                                           @NonNull int[] grantResults) {
+        PermissionUtils.requestPermissionsResult(this, requestCode, permissions, grantResults, mPermissionGrant);
+        initCamera();
+    }
+
+    @Override
+    protected void onPause() {
+        super.onPause();
+        if (openCvCameraView != null) {
+            openCvCameraView.disableView();
+        }
+    }
+
+    @Override
+    protected void onResume() {
+        super.onResume();
+    }
+
+    @Override
+    protected void onDestroy() {
+        super.onDestroy();
+        if (openCvCameraView != null) {
+            openCvCameraView.disableView();
         }
     }
 }
