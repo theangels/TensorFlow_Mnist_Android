@@ -4,23 +4,28 @@ import android.Manifest;
 import android.app.Activity;
 import android.content.pm.PackageManager;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.os.Environment;
+import android.os.Handler;
 import android.support.annotation.NonNull;
 import android.support.v4.content.ContextCompat;
-import android.support.v7.app.AppCompatActivity;
 import android.os.Bundle;
 import android.util.Log;
 import android.view.SurfaceView;
 import android.view.WindowManager;
+import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
 import org.opencv.android.CameraBridgeViewBase;
 import org.opencv.android.OpenCVLoader;
 import org.opencv.android.Utils;
+import org.opencv.core.Core;
 import org.opencv.core.CvType;
 import org.opencv.core.Mat;
+import org.opencv.core.MatOfPoint;
+import org.opencv.core.Point;
+import org.opencv.core.Range;
+import org.opencv.core.Rect;
 import org.opencv.core.Scalar;
 import org.opencv.core.Size;
 import org.opencv.imgproc.Imgproc;
@@ -29,25 +34,73 @@ import org.ubilabs.angel.uitl.PermissionUtils;
 import java.io.File;
 import java.io.FileOutputStream;
 import java.io.IOException;
-import java.io.InputStream;
+import java.util.ArrayList;
 import java.util.List;
 import java.util.concurrent.Executor;
 import java.util.concurrent.Executors;
 
+import static org.opencv.imgproc.Imgproc.MORPH_RECT;
+
 public class MainActivity extends Activity implements CameraBridgeViewBase.CvCameraViewListener2 {
 
+    /*
+    * Initial & Debug
+    * */
     private static final String TAG = "MainActivity";
 
-    private CameraBridgeViewBase openCvCameraView;
+    private SeekBar threshold1;
+    private TextView threshold1Dislpay;
+    private TextView displayNumber;
+    private String numberString;
+    private Handler handler;
 
-    static {
-        if (!OpenCVLoader.initDebug()) {
-            Log.d(TAG, "OpenCV not loaded");
+    @SuppressWarnings("SuspiciousNameCombination")
+    @Override
+    protected void onCreate(Bundle savedInstanceState) {
+        super.onCreate(savedInstanceState);
+        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
+        setContentView(R.layout.activity_main);
+
+        handler = new Handler();
+
+        initDebug();
+        initTensorFlowAndLoadModel();
+
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermission();
         } else {
-            Log.d(TAG, "OpenCV loaded");
+            initCamera();
         }
     }
 
+    private void initDebug(){
+        threshold1 = findViewById(R.id.threshold1);
+        threshold1Dislpay = findViewById(R.id.threshold1Display);
+        threshold1.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
+            @Override
+            public void onProgressChanged(SeekBar seekBar, int i, boolean b) {
+                threshold1Dislpay.setText(String.valueOf(i));
+            }
+
+            @Override
+            public void onStartTrackingTouch(SeekBar seekBar) {
+
+            }
+
+            @Override
+            public void onStopTrackingTouch(SeekBar seekBar) {
+
+            }
+        });
+        threshold1.setProgress(100);
+        displayNumber = findViewById(R.id.displayNumber);
+    }
+
+    /*
+    * TensorFlow
+    * */
     private static final int INPUT_SIZE = 28;
     private static final String INPUT_NAME = "input";
     private static final String OUTPUT_NAME = "output";
@@ -58,25 +111,6 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
     private Classifier classifier;
     private Executor executor = Executors.newSingleThreadExecutor();
-
-
-    @SuppressWarnings("SuspiciousNameCombination")
-    @Override
-    protected void onCreate(Bundle savedInstanceState) {
-        super.onCreate(savedInstanceState);
-        getWindow().addFlags(WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
-        setContentView(R.layout.activity_main);
-
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
-                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-                || ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermission();
-        } else {
-            initCamera();
-        }
-
-        initTensorFlowAndLoadModel();
-    }
 
     private void initTensorFlowAndLoadModel() {
         executor.execute(new Runnable() {
@@ -91,7 +125,6 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
                             INPUT_NAME,
                             OUTPUT_NAME);
                     Log.d(TAG, "Load Success");
-                    doReconize();
                 } catch (final Exception e) {
                     throw new RuntimeException("Error initializing TensorFlow!", e);
                 }
@@ -99,36 +132,76 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         });
     }
 
-    private void doReconize() {
-        try {
-            InputStream is = getResources().getAssets().open("test.png");
-            Bitmap bitmap  = BitmapFactory.decodeStream(is);
+    private void doRecognize(Mat input) {
+        float[] pixels = new float[INPUT_SIZE * INPUT_SIZE];
 
-            int[] pixelsInt = new int[INPUT_SIZE * INPUT_SIZE];
-            float[] pixels = new float[INPUT_SIZE * INPUT_SIZE];
+//        Log.d(TAG, "Row: " + input.rows() + "    " + "Col: " + input.cols());
 
-            bitmap.getPixels(pixelsInt, 0, bitmap.getWidth(), 0, 0, bitmap.getWidth(), bitmap.getHeight());
-            for (int i = 0; i < pixelsInt.length; i++) {
-                pixels[i] = (255-pixelsInt[i]) * 1f/255;
+        int cnt = 0;
+        for (int i = 0; i < input.rows(); i++) {
+            for (int j = 0; j < input.cols(); j++) {
+                pixels[cnt] = (float) input.get(i, j)[0] * 1f / 255;
+                cnt++;
             }
+        }
 
-            final List<Classifier.Recognition> results = classifier.recognizeImage(pixels);
+//        Log.d(TAG, Arrays.toString(pixels));
 
-            if (results.size() > 0) {
-                String value = " Number is : " + results.get(0).getTitle();
-                Log.d(TAG, value);
-            }
-        } catch (IOException e) {
-            e.printStackTrace();
+        final List<Classifier.Recognition> results = classifier.recognizeImage(pixels);
+
+        if (results.size() > 0) {
+            numberString = " Number is : " + results.get(0).getTitle();
+            Log.d(TAG, numberString);
+            handler.post(updateView);
         }
     }
 
+    Runnable updateView = new Runnable(){
+
+        @Override
+        public void run() {
+            displayNumber.setText(numberString);
+        }
+
+    };
+
     /*
-     *   Opencv Callbacks
-     *
-     *   */
+    * OpenCV
+    * */
+    private CameraBridgeViewBase openCvCameraView;
+
+    static {
+        if (!OpenCVLoader.initDebug()) {
+            Log.d(TAG, "OpenCV not loaded");
+        } else {
+            Log.d(TAG, "OpenCV loaded");
+        }
+    }
+
+    private Mat tmpMat;
+    private Mat tmpMat2;
+    private Mat tmpMat3;
+    private Mat zeroMat;
+    private Mat emptyMat;
+    private Mat kernelDilate;
+
+    private void initCamera() {
+        openCvCameraView = findViewById(R.id.HelloOpenCvView);
+        openCvCameraView.setVisibility(SurfaceView.VISIBLE);
+        openCvCameraView.setCvCameraViewListener(this);
+        openCvCameraView.setMaxFrameSize(320, 240);
+        openCvCameraView.enableFpsMeter();
+        openCvCameraView.enableView();
+    }
+
     @Override
     public void onCameraViewStarted(int width, int height) {
+        tmpMat = new Mat();
+        tmpMat2 = new Mat();
+        tmpMat3 = new Mat();
+        zeroMat = new Mat(height, width, CvType.CV_8U);
+        emptyMat = new Mat();
+        kernelDilate = Imgproc.getStructuringElement(MORPH_RECT, new Size(2, 2));
     }
 
     @Override
@@ -138,10 +211,28 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
         Mat greyImg = inputFrame.gray();
-        Mat smallImg = new Mat(new Size(28,28), CvType.CV_8U, new Scalar(0));
-        Imgproc.resize(greyImg,smallImg,new Size(28,28));
-        mat2PngFile(smallImg);
-        return inputFrame.rgba();
+
+        Mat cannyMat = tmpMat;
+        emptyMat.copyTo(cannyMat);
+        int ratio = 3;
+        Imgproc.Canny(greyImg, cannyMat, threshold1.getProgress(), threshold1.getProgress() * ratio);
+        List<MatOfPoint> contours = new ArrayList<>();
+        Mat hierarchy = tmpMat2;
+        emptyMat.copyTo(hierarchy);
+        Imgproc.findContours(cannyMat, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
+        Imgproc.drawContours(cannyMat, contours, -1, new Scalar(255), -1);
+        Imgproc.dilate(cannyMat,cannyMat,kernelDilate);
+        for (MatOfPoint contour : contours) {
+            contour.release();
+        }
+
+
+        Mat numBerImg = new Mat(cannyMat, new Rect(100, 100, 28, 28));
+        doRecognize(numBerImg);
+//        mat2PngFile(numBerImg);
+
+        Core.rectangle(cannyMat, new Point(100, 100), new Point(128, 128), new Scalar(255), 1);
+        return cannyMat;
     }
 
     private File mat2PngFile(Mat mat) {
@@ -166,15 +257,6 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
             e.printStackTrace();
         }
         return file;
-    }
-
-    private void initCamera() {
-        openCvCameraView = findViewById(R.id.HelloOpenCvView);
-        openCvCameraView.setVisibility(SurfaceView.VISIBLE);
-        openCvCameraView.setCvCameraViewListener(this);
-        openCvCameraView.setMaxFrameSize(1920, 1080);
-        openCvCameraView.enableFpsMeter();
-        openCvCameraView.enableView();
     }
 
     private void requestPermission() {
@@ -222,6 +304,13 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     @Override
     protected void onResume() {
         super.onResume();
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
+                || ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
+            requestPermission();
+        } else {
+            initCamera();
+        }
     }
 
     @Override
