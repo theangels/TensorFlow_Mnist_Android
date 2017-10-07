@@ -94,7 +94,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
             }
         });
-        threshold1.setProgress(100);
+        threshold1.setProgress(15);
         displayNumber = findViewById(R.id.displayNumber);
     }
 
@@ -184,6 +184,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     private Mat zeroMat;
     private Mat emptyMat;
     private Mat kernelDilate;
+    private Mat kernelErode;
 
     private void initCamera() {
         openCvCameraView = findViewById(R.id.HelloOpenCvView);
@@ -202,6 +203,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         zeroMat = new Mat(height, width, CvType.CV_8U);
         emptyMat = new Mat();
         kernelDilate = Imgproc.getStructuringElement(MORPH_RECT, new Size(2, 2));
+        kernelErode = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE,new Size(2,2));
     }
 
     @Override
@@ -216,22 +218,14 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         emptyMat.copyTo(cannyMat);
         int ratio = 3;
         Imgproc.Canny(greyImg, cannyMat, threshold1.getProgress(), threshold1.getProgress() * ratio);
-        List<MatOfPoint> contours = new ArrayList<>();
-        Mat hierarchy = tmpMat2;
-        emptyMat.copyTo(hierarchy);
-        Imgproc.findContours(cannyMat, contours, hierarchy, Imgproc.RETR_LIST, Imgproc.CHAIN_APPROX_NONE);
-        Imgproc.drawContours(cannyMat, contours, -1, new Scalar(255), -1);
         Imgproc.dilate(cannyMat,cannyMat,kernelDilate);
-        for (MatOfPoint contour : contours) {
-            contour.release();
-        }
+        Imgproc.erode(cannyMat,cannyMat,kernelErode);
 
-
-        Mat numBerImg = new Mat(cannyMat, new Rect(100, 100, 28, 28));
+        Mat numBerImg = new Mat(cannyMat, new Rect(160, 120, 28, 28));
         doRecognize(numBerImg);
-//        mat2PngFile(numBerImg);
+        mat2PngFile(numBerImg);
 
-        Core.rectangle(cannyMat, new Point(100, 100), new Point(128, 128), new Scalar(255), 1);
+        Core.rectangle(cannyMat, new Point(160, 120), new Point(188, 148), new Scalar(255), 1);
         return cannyMat;
     }
 
