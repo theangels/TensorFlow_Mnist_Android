@@ -27,7 +27,6 @@ android {
 dependencies {
     compile fileTree(include: ['*.jar'], dir: 'libs')
     compile 'com.android.support:appcompat-v7:26.0.0-alpha1'
-    compile 'com.android.support.constraint:constraint-layout:1.0.2'
     compile 'org.tensorflow:tensorflow-android:1.3.1-alpha'
     compile project(':openCVLibrary2411')
 }

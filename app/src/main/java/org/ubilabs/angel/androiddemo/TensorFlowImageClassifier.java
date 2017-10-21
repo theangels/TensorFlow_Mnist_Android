@@ -147,6 +147,9 @@ public class TensorFlowImageClassifier implements Classifier {
             recognitions.add(pq.poll());
         }
         TraceCompat.endSection(); // "recognizeImage"
+
+        Log.d(TAG,"" + recognitions);
+
         return recognitions;
     }
 

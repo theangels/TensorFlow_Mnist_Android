@@ -75,7 +75,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         }
     }
 
-    private void initDebug(){
+    private void initDebug() {
         threshold1 = findViewById(R.id.threshold1);
         threshold1Dislpay = findViewById(R.id.threshold1Display);
         threshold1.setOnSeekBarChangeListener(new SeekBar.OnSeekBarChangeListener() {
@@ -94,7 +94,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
             }
         });
-        threshold1.setProgress(15);
+        threshold1.setProgress(24);
         displayNumber = findViewById(R.id.displayNumber);
     }
 
@@ -156,7 +156,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         }
     }
 
-    Runnable updateView = new Runnable(){
+    Runnable updateView = new Runnable() {
 
         @Override
         public void run() {
@@ -185,12 +185,15 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     private Mat emptyMat;
     private Mat kernelDilate;
     private Mat kernelErode;
+    private static int MAXWIDTH = 320;
+    private static int MAXHEIGHT = 240;
+    private static int IMGSIZE = 28;
 
     private void initCamera() {
         openCvCameraView = findViewById(R.id.HelloOpenCvView);
         openCvCameraView.setVisibility(SurfaceView.VISIBLE);
         openCvCameraView.setCvCameraViewListener(this);
-        openCvCameraView.setMaxFrameSize(320, 240);
+        openCvCameraView.setMaxFrameSize(MAXWIDTH, MAXHEIGHT);
         openCvCameraView.enableFpsMeter();
         openCvCameraView.enableView();
     }
@@ -203,7 +206,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
         zeroMat = new Mat(height, width, CvType.CV_8U);
         emptyMat = new Mat();
         kernelDilate = Imgproc.getStructuringElement(MORPH_RECT, new Size(2, 2));
-        kernelErode = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE,new Size(2,2));
+        kernelErode = Imgproc.getStructuringElement(Imgproc.MORPH_ELLIPSE, new Size(1, 1));
     }
 
     @Override
@@ -212,21 +215,21 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
 
     @Override
     public Mat onCameraFrame(CameraBridgeViewBase.CvCameraViewFrame inputFrame) {
-        Mat greyImg = inputFrame.gray();
+        Mat grayImg = inputFrame.gray();
+        Mat cannyImg = tmpMat;
+        emptyMat.copyTo(cannyImg);
 
-        Mat cannyMat = tmpMat;
-        emptyMat.copyTo(cannyMat);
         int ratio = 3;
-        Imgproc.Canny(greyImg, cannyMat, threshold1.getProgress(), threshold1.getProgress() * ratio);
-        Imgproc.dilate(cannyMat,cannyMat,kernelDilate);
-        Imgproc.erode(cannyMat,cannyMat,kernelErode);
+        Imgproc.Canny(grayImg, cannyImg, threshold1.getProgress(), threshold1.getProgress() * ratio);
+        Imgproc.dilate(cannyImg, cannyImg, kernelDilate);
+        Imgproc.erode(cannyImg, cannyImg, kernelErode);
 
-        Mat numBerImg = new Mat(cannyMat, new Rect(160, 120, 28, 28));
+        Mat numBerImg = new Mat(cannyImg, new Rect((MAXWIDTH - IMGSIZE) / 2, (MAXHEIGHT - IMGSIZE) / 2, IMGSIZE, IMGSIZE));
         doRecognize(numBerImg);
-        mat2PngFile(numBerImg);
+//        mat2PngFile(numBerImg);
 
-        Core.rectangle(cannyMat, new Point(160, 120), new Point(188, 148), new Scalar(255), 1);
-        return cannyMat;
+        Core.rectangle(cannyImg, new Point((MAXWIDTH - IMGSIZE) / 2, (MAXHEIGHT - IMGSIZE) / 2), new Point((MAXWIDTH + IMGSIZE) / 2, (MAXHEIGHT + IMGSIZE) / 2), new Scalar(255), 1);
+        return cannyImg;
     }
 
     private File mat2PngFile(Mat mat) {
@@ -298,13 +301,7 @@ public class MainActivity extends Activity implements CameraBridgeViewBase.CvCam
     @Override
     protected void onResume() {
         super.onResume();
-        if (ContextCompat.checkSelfPermission(this, Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED
-                || ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED
-                || ContextCompat.checkSelfPermission(this, Manifest.permission.READ_EXTERNAL_STORAGE) != PackageManager.PERMISSION_GRANTED) {
-            requestPermission();
-        } else {
-            initCamera();
-        }
+        initCamera();
     }
 
     @Override
